@@ -23,8 +23,8 @@ class AltitudeFusionTinyEKF : public TinyEKF {
             this->setQ(0, 0, .0001);
 
             // Same for measurement noise
-            this->setR(0, 0, 1.5f);
-            this->setR(1, 1, 0.25f);
+            this->setR(0, 0, 2.0f);
+            this->setR(1, 1, 0.10f);
             //this->setR(2, 2, 0.5f);
         }
 

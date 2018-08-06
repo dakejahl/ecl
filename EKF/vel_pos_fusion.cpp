@@ -130,7 +130,7 @@ void Ekf::fuseVelPosHeight()
 			float rangefinder_noise = altitudeEKF.getR(1, 1);
 			// Take the average of the measurement noise between the two sensors. 
 			//R[5] = fmaxf(sqrtf(baro_noise * baro_noise + rangefinder_noise * rangefinder_noise), 0.01f);
-			R[5] = 1.58f;
+			R[5] = 1.0f;
 			R[5] = R[5] * R[5];
 			// innovation gate size
 			gate_size[5] = 5.0f;
