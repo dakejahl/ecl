@@ -45,6 +45,8 @@
 #include <ecl.h>
 #include <mathlib/mathlib.h>
 #include "tiny_ekf_interface.h"
+#include <uORB/topics/tiny_ekf.h>
+#include <uORB/uORB.h>
 
 void Ekf::fuseVelPosHeight()
 {
@@ -96,7 +98,33 @@ void Ekf::fuseVelPosHeight()
 	}
 
 	if (_fuse_height) {
-		AltitudeFusionTinyEKF tinyEKF;
+		static orb_advert_t _tiny_ekf_topic = nullptr;
+
+		AltitudeFusionTinyEKF altitudeEKF;
+
+		double measurements[3] = {0};
+		measurements[0] = -1.0f * (_gps_sample_delayed.hgt - _gps_alt_ref - _hgt_sensor_offset);
+		measurements[1] = -1.0f * (_baro_sample_delayed.hgt - _baro_hgt_offset - _hgt_sensor_offset);
+		measurements[2] = (-math::max(_range_sample_delayed.rng * _R_rng_to_earth_2_2, _params.rng_gnd_clearance)) - _hgt_sensor_offset;
+
+		altitudeEKF.step(measurements);
+		float z_estimate = altitudeEKF.getX(0);
+		PX4_INFO("Estimated height: %f", (double) z_estimate);
+
+		tiny_ekf_s report = {};
+		report.z_est = z_estimate;
+		report.timestamp = _time_last_imu;
+
+		if(_tiny_ekf_topic == nullptr) {
+			_tiny_ekf_topic = orb_advertise(ORB_ID(tiny_ekf), &report);
+		} else {
+			orb_publish(ORB_ID(tiny_ekf), _tiny_ekf_topic, &report);
+		}
+
+
+
+		//////
+
 		if (_control_status.flags.baro_hgt) {
 			fuse_map[5] = true;
 			// vertical position innovation - baro measurement has opposite sign to earth z axis
