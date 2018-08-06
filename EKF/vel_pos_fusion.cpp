@@ -98,99 +98,108 @@ void Ekf::fuseVelPosHeight()
 	}
 
 	if (_fuse_height) {
-		static orb_advert_t _tiny_ekf_topic = nullptr;
-
+		// Fuse all available altitude observations
 		static AltitudeFusionTinyEKF altitudeEKF;
 
-		double measurements[3] = {0};
-		float gps_measurement = -1.0f * (_gps_sample_delayed.hgt - _gps_alt_ref - _hgt_sensor_offset);
-		float baro_measurement = -1.0f * (_baro_sample_delayed.hgt - _baro_hgt_offset - _hgt_sensor_offset);
-		//float rangefinder_measurement = (-math::max(_range_sample_delayed.rng * _R_rng_to_earth_2_2, _params.rng_gnd_clearance)) - _hgt_sensor_offset;
-		float rangefinder_measurement = -1.0f * _range_sample_delayed.rng;
-		measurements[0] = gps_measurement;
-		measurements[1] = baro_measurement;
-		measurements[2] = rangefinder_measurement;
+		/* Get rid of the standard choice of estimating one of our observations... use them all. */
+		if(_control_status.flags.baro_hgt || _control_status.flags.gps_hgt || _control_status.flags.rng_hgt) {
 
-		altitudeEKF.step(measurements);
-		float z_estimate = altitudeEKF.getX(0);
-		PX4_INFO("Estimated height: %f", (double) z_estimate);
+			/* Run the TinyEKF estimator on our 3 altitude observations */
+			double measurements[3] = {0};
+			float gps_measurement = -1.0f * (_gps_sample_delayed.hgt - _gps_alt_ref - _hgt_sensor_offset);
+			float baro_measurement = -1.0f * (_baro_sample_delayed.hgt - _baro_hgt_offset - _hgt_sensor_offset);
+			float rangefinder_measurement = -1.0f * _range_sample_delayed.rng;
+			measurements[0] = gps_measurement;
+			measurements[1] = baro_measurement;
+			measurements[2] = rangefinder_measurement;
 
-		tiny_ekf_s report = {};
-		report.z_est = z_estimate;
-		report.gps = gps_measurement;
-		report.baro = baro_measurement;
-		report.rangefinder = rangefinder_measurement;
-		report.timestamp = _time_last_imu;
+			altitudeEKF.step(measurements);
+			float z_estimate = altitudeEKF.getX(0);
 
-		if(_tiny_ekf_topic == nullptr) {
-			_tiny_ekf_topic = orb_advertise(ORB_ID(tiny_ekf), &report);
-		} else {
-			orb_publish(ORB_ID(tiny_ekf), _tiny_ekf_topic, &report);
-		}
+			static orb_advert_t _tiny_ekf_topic = nullptr;
+			tiny_ekf_s report = {};
+			report.z_est = z_estimate;
+			report.gps = gps_measurement;
+			report.baro = baro_measurement;
+			report.rangefinder = rangefinder_measurement;
+			report.timestamp = _time_last_imu;
 
-
-
-		//////
-
-		if (_control_status.flags.baro_hgt) {
-			fuse_map[5] = true;
-			// vertical position innovation - baro measurement has opposite sign to earth z axis
-			innovation[5] = _state.pos(2) + _baro_sample_delayed.hgt - _baro_hgt_offset - _hgt_sensor_offset;
-			// observation variance - user parameter defined
-			R[5] = fmaxf(_params.baro_noise, 0.01f);
-			R[5] = R[5] * R[5];
-			// innovation gate size
-			gate_size[5] = fmaxf(_params.baro_innov_gate, 1.0f);
-
-			// Compensate for positive static pressure transients (negative vertical position innovations)
-			// casued by rotor wash ground interaction by applying a temporary deadzone to baro innovations.
-			float deadzone_start = 0.0f;
-			float deadzone_end = deadzone_start + _params.gnd_effect_deadzone;
-
-			if (_control_status.flags.gnd_effect) {
-				if (innovation[5] < -deadzone_start) {
-					if (innovation[5] <= -deadzone_end) {
-						innovation[5] += deadzone_end;
-
-					} else {
-						innovation[5] = -deadzone_start;
-					}
-				}
+			if(_tiny_ekf_topic == nullptr) {
+				_tiny_ekf_topic = orb_advertise(ORB_ID(tiny_ekf), &report);
+			} else {
+				orb_publish(ORB_ID(tiny_ekf), _tiny_ekf_topic, &report);
 			}
 
-		} else if (_control_status.flags.gps_hgt) {
 			fuse_map[5] = true;
-			// vertical position innovation - gps measurement has opposite sign to earth z axis
-			innovation[5] = _state.pos(2) + _gps_sample_delayed.hgt - _gps_alt_ref - _hgt_sensor_offset;
-			// observation variance - receiver defined and parameter limited
-			// use scaled horizontal position accuracy assuming typical ratio of VDOP/HDOP
-			float lower_limit = fmaxf(_params.gps_pos_noise, 0.01f);
-			float upper_limit = fmaxf(_params.pos_noaid_noise, lower_limit);
-			R[5] = 1.5f * math::constrain(_gps_sample_delayed.vacc, lower_limit, upper_limit);
-			R[5] = R[5] * R[5];
-			// innovation gate size
-			gate_size[5] = fmaxf(_params.baro_innov_gate, 1.0f);
-
-		} else if (_control_status.flags.rng_hgt && (_R_rng_to_earth_2_2 > _params.range_cos_max_tilt)) {
-			fuse_map[5] = true;
-			// use range finder with tilt correction
-			innovation[5] = _state.pos(2) - (-math::max(_range_sample_delayed.rng * _R_rng_to_earth_2_2,
-							 _params.rng_gnd_clearance)) - _hgt_sensor_offset;
+			// vertical position innovation - baro measurement has opposite sign to earth z axis
+			innovation[5] = _state.pos(2) - z_estimate;
 			// observation variance - user parameter defined
-			R[5] = fmaxf((sq(_params.range_noise) + sq(_params.range_noise_scaler * _range_sample_delayed.rng)) * sq(_R_rng_to_earth_2_2), 0.01f);
-			// innovation gate size
-			gate_size[5] = fmaxf(_params.range_innov_gate, 1.0f);
-
-		} else if (_control_status.flags.ev_hgt) {
-			fuse_map[5] = true;
-			// calculate the innovation assuming the external vision observaton is in local NED frame
-			innovation[5] = _state.pos(2) - _ev_sample_delayed.posNED(2);
-			// observation variance - defined externally
-			R[5] = fmaxf(_ev_sample_delayed.posErr, 0.01f);
+			R[5] = 0.25f;
 			R[5] = R[5] * R[5];
 			// innovation gate size
-			gate_size[5] = fmaxf(_params.ev_innov_gate, 1.0f);
+			gate_size[5] = 5.0f;
 		}
+
+
+		// if (_control_status.flags.baro_hgt) {
+		// 	fuse_map[5] = true;
+		// 	// vertical position innovation - baro measurement has opposite sign to earth z axis
+		// 	innovation[5] = _state.pos(2) + _baro_sample_delayed.hgt - _baro_hgt_offset - _hgt_sensor_offset;
+		// 	// observation variance - user parameter defined
+		// 	R[5] = fmaxf(_params.baro_noise, 0.01f);
+		// 	R[5] = R[5] * R[5];
+		// 	// innovation gate size
+		// 	gate_size[5] = fmaxf(_params.baro_innov_gate, 1.0f);
+
+		// 	// Compensate for positive static pressure transients (negative vertical position innovations)
+		// 	// casued by rotor wash ground interaction by applying a temporary deadzone to baro innovations.
+		// 	float deadzone_start = 0.0f;
+		// 	float deadzone_end = deadzone_start + _params.gnd_effect_deadzone;
+
+		// 	if (_control_status.flags.gnd_effect) {
+		// 		if (innovation[5] < -deadzone_start) {
+		// 			if (innovation[5] <= -deadzone_end) {
+		// 				innovation[5] += deadzone_end;
+
+		// 			} else {
+		// 				innovation[5] = -deadzone_start;
+		// 			}
+		// 		}
+		// 	}
+
+		// } else if (_control_status.flags.gps_hgt) {
+		// 	fuse_map[5] = true;
+		// 	// vertical position innovation - gps measurement has opposite sign to earth z axis
+		// 	innovation[5] = _state.pos(2) + _gps_sample_delayed.hgt - _gps_alt_ref - _hgt_sensor_offset;
+		// 	// observation variance - receiver defined and parameter limited
+		// 	// use scaled horizontal position accuracy assuming typical ratio of VDOP/HDOP
+		// 	float lower_limit = fmaxf(_params.gps_pos_noise, 0.01f);
+		// 	float upper_limit = fmaxf(_params.pos_noaid_noise, lower_limit);
+		// 	R[5] = 1.5f * math::constrain(_gps_sample_delayed.vacc, lower_limit, upper_limit);
+		// 	R[5] = R[5] * R[5];
+		// 	// innovation gate size
+		// 	gate_size[5] = fmaxf(_params.baro_innov_gate, 1.0f);
+
+		// } else if (_control_status.flags.rng_hgt && (_R_rng_to_earth_2_2 > _params.range_cos_max_tilt)) {
+		// 	fuse_map[5] = true;
+		// 	// use range finder with tilt correction
+		// 	innovation[5] = _state.pos(2) - (-math::max(_range_sample_delayed.rng * _R_rng_to_earth_2_2,
+		// 					 _params.rng_gnd_clearance)) - _hgt_sensor_offset;
+		// 	// observation variance - user parameter defined
+		// 	R[5] = fmaxf((sq(_params.range_noise) + sq(_params.range_noise_scaler * _range_sample_delayed.rng)) * sq(_R_rng_to_earth_2_2), 0.01f);
+		// 	// innovation gate size
+		// 	gate_size[5] = fmaxf(_params.range_innov_gate, 1.0f);
+
+		// } else if (_control_status.flags.ev_hgt) {
+		// 	fuse_map[5] = true;
+		// 	// calculate the innovation assuming the external vision observaton is in local NED frame
+		// 	innovation[5] = _state.pos(2) - _ev_sample_delayed.posNED(2);
+		// 	// observation variance - defined externally
+		// 	R[5] = fmaxf(_ev_sample_delayed.posErr, 0.01f);
+		// 	R[5] = R[5] * R[5];
+		// 	// innovation gate size
+		// 	gate_size[5] = fmaxf(_params.ev_innov_gate, 1.0f);
+		// }
 
 		// update innovation class variable for logging purposes
 		_vel_pos_innov[5] = innovation[5];
