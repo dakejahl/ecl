@@ -100,12 +100,13 @@ void Ekf::fuseVelPosHeight()
 	if (_fuse_height) {
 		static orb_advert_t _tiny_ekf_topic = nullptr;
 
-		AltitudeFusionTinyEKF altitudeEKF;
+		static AltitudeFusionTinyEKF altitudeEKF;
 
 		double measurements[3] = {0};
 		float gps_measurement = -1.0f * (_gps_sample_delayed.hgt - _gps_alt_ref - _hgt_sensor_offset);
 		float baro_measurement = -1.0f * (_baro_sample_delayed.hgt - _baro_hgt_offset - _hgt_sensor_offset);
-		float rangefinder_measurement = (-math::max(_range_sample_delayed.rng * _R_rng_to_earth_2_2, _params.rng_gnd_clearance)) - _hgt_sensor_offset;
+		//float rangefinder_measurement = (-math::max(_range_sample_delayed.rng * _R_rng_to_earth_2_2, _params.rng_gnd_clearance)) - _hgt_sensor_offset;
+		float rangefinder_measurement = -1.0f * _range_sample_delayed.rng;
 		measurements[0] = gps_measurement;
 		measurements[1] = baro_measurement;
 		measurements[2] = rangefinder_measurement;
