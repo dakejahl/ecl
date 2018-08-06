@@ -32,10 +32,10 @@
 ############################################################################
 
 add_library(ecl_TinyEKF
-	tiny_ekf.c
-	tiny_ekf.h
-	TinyEKF.h
-	tiny_ekf_struct.h
+	src/tiny_ekf.c
+	src/tiny_ekf.h
+	src/TinyEKF.h
+	src/tiny_ekf_struct.h
 	)
 add_dependencies(ecl_TinyEKF prebuild_targets)
 target_compile_definitions(ecl_TinyEKF PRIVATE -DMODULE_NAME="ecl/TinyEKF")
