@@ -103,9 +103,12 @@ void Ekf::fuseVelPosHeight()
 		AltitudeFusionTinyEKF altitudeEKF;
 
 		double measurements[3] = {0};
-		measurements[0] = -1.0f * (_gps_sample_delayed.hgt - _gps_alt_ref - _hgt_sensor_offset);
-		measurements[1] = -1.0f * (_baro_sample_delayed.hgt - _baro_hgt_offset - _hgt_sensor_offset);
-		measurements[2] = (-math::max(_range_sample_delayed.rng * _R_rng_to_earth_2_2, _params.rng_gnd_clearance)) - _hgt_sensor_offset;
+		float gps_measurement = -1.0f * (_gps_sample_delayed.hgt - _gps_alt_ref - _hgt_sensor_offset);
+		float baro_measurement = -1.0f * (_baro_sample_delayed.hgt - _baro_hgt_offset - _hgt_sensor_offset);
+		float rangefinder_measurement = (-math::max(_range_sample_delayed.rng * _R_rng_to_earth_2_2, _params.rng_gnd_clearance)) - _hgt_sensor_offset;
+		measurements[0] = gps_measurement;
+		measurements[1] = baro_measurement;
+		measurements[2] = rangefinder_measurement;
 
 		altitudeEKF.step(measurements);
 		float z_estimate = altitudeEKF.getX(0);
@@ -113,6 +116,9 @@ void Ekf::fuseVelPosHeight()
 
 		tiny_ekf_s report = {};
 		report.z_est = z_estimate;
+		report.gps = gps_measurement;
+		report.baro = baro_measurement;
+		report.rangefinder = rangefinder_measurement;
 		report.timestamp = _time_last_imu;
 
 		if(_tiny_ekf_topic == nullptr) {
