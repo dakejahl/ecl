@@ -102,24 +102,33 @@ void Ekf::fuseVelPosHeight()
 		static AltitudeFusionTinyEKF altitudeEKF;
 
 		/* Get rid of the standard choice of estimating one of our observations... use them all. */
-		if(_control_status.flags.baro_hgt || _control_status.flags.gps_hgt || _control_status.flags.rng_hgt) {
+		if(_control_status.flags.baro_hgt || _control_status.flags.rng_hgt) {
 
 			/* Run the TinyEKF estimator on our 3 altitude observations */
-			double measurements[3] = {0};
-			float gps_measurement = -1.0f * (_gps_sample_delayed.hgt - _gps_alt_ref - _hgt_sensor_offset);
+			double measurements[2] = {0};
+			//float gps_measurement = -1.0f * (_gps_sample_delayed.hgt - _gps_alt_ref - _hgt_sensor_offset);
 			float baro_measurement = -1.0f * (_baro_sample_delayed.hgt - _baro_hgt_offset - _hgt_sensor_offset);
 			float rangefinder_measurement = -1.0f * _range_sample_delayed.rng;
-			measurements[0] = gps_measurement;
-			measurements[1] = baro_measurement;
-			measurements[2] = rangefinder_measurement;
+
+			/* If range finder is not available, just fuse in the baro reading in it's place */
+			if(_control_status.flags.rng_hgt) {
+				measurements[0] = baro_measurement;
+				measurements[1] = rangefinder_measurement;
+			} else {
+				measurements[0] = baro_measurement;
+				measurements[1] = baro_measurement;
+			}
+
 
 			altitudeEKF.step(measurements);
 			float z_estimate = altitudeEKF.getX(0);
 
+			PX4_INFO("Height offset: %f", (double)_hgt_sensor_offset);
+
 			static orb_advert_t _tiny_ekf_topic = nullptr;
 			tiny_ekf_s report = {};
 			report.z_est = z_estimate;
-			report.gps = gps_measurement;
+
 			report.baro = baro_measurement;
 			report.rangefinder = rangefinder_measurement;
 			report.timestamp = _time_last_imu;

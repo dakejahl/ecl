@@ -8,7 +8,7 @@
 
 // These must be defined before including TinyEKF.h
 #define Nsta 1     // One state value: Height
-#define Mobs 3     // Three measurements: GPS, Barometer, and Rangefinder
+#define Mobs 2     // Three measurements: GPS, Barometer, and Rangefinder
 
 
 #include <TinyEKF/src/TinyEKF.h>
@@ -25,7 +25,7 @@ class AltitudeFusionTinyEKF : public TinyEKF {
             // Same for measurement noise
             this->setR(0, 0, .0001);
             this->setR(1, 1, .0001);
-            this->setR(2, 2, .0001);
+            //this->setR(2, 2, .0001);
         }
 
     protected:
@@ -45,11 +45,11 @@ class AltitudeFusionTinyEKF : public TinyEKF {
             //   hx[2] = .9987 * this->x[1] + .001;
             hx[0] = this->x[0]; // GPS
             hx[1] = this->x[0]; // Baro 
-            hx[2] = this->x[0]; // Rangefinder
+            //hx[2] = this->x[0]; // Rangefinder
 
             // Jacobian of measurement function
             H[0][0] = 1;        // GPS
             H[1][0] = 1 ;       // Baro
-            H[2][0] = 1 ;       // Rangefinder
+            //H[2][0] = 1 ;       // Rangefinder
         }
 };
