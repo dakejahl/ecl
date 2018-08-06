@@ -101,16 +101,16 @@ void Ekf::fuseVelPosHeight()
 		// Fuse all available altitude observations
 		static AltitudeFusionTinyEKF altitudeEKF;
 
-		/* Get rid of the standard choice of estimating one of our observations... use them all. */
+		// Get rid of the standard choice of estimating one of our observations... use them all. 
 		if(_control_status.flags.baro_hgt || _control_status.flags.rng_hgt) {
 
-			/* Run the TinyEKF estimator on our 3 altitude observations */
+			// Run the TinyEKF estimator on our 3 altitude observations
 			double measurements[2] = {0};
 			//float gps_measurement = -1.0f * (_gps_sample_delayed.hgt - _gps_alt_ref - _hgt_sensor_offset);
 			float baro_measurement = -1.0f * (_baro_sample_delayed.hgt - _baro_hgt_offset - _hgt_sensor_offset);
 			float rangefinder_measurement = -1.0f * _range_sample_delayed.rng;
 
-			/* If range finder is not available, just fuse in the baro reading in it's place */
+			// If range finder is not available, just fuse in the baro reading in it's place 
 			if(_control_status.flags.rng_hgt) {
 				measurements[0] = baro_measurement;
 				measurements[1] = rangefinder_measurement;
@@ -119,18 +119,30 @@ void Ekf::fuseVelPosHeight()
 				measurements[1] = baro_measurement;
 			}
 
-
 			altitudeEKF.step(measurements);
 			float z_estimate = altitudeEKF.getX(0);
 
-			PX4_INFO("Height offset: %f", (double)_hgt_sensor_offset);
+			fuse_map[5] = true;
+			// vertical position innovation - baro measurement has opposite sign to earth z axis
+			innovation[5] = _state.pos(2) - z_estimate;
+			// Get the measurement noise covariance for altitude estimate from the TinyEKF 
+			float baro_noise = altitudeEKF.getR(0, 0);
+			float rangefinder_noise = altitudeEKF.getR(1, 1);
+			// Take the average of the measurement noise between the two sensors. 
+			R[5] = sqrtf(baro_noise * baro_noise + rangefinder_noise * rangefinder_noise);
+			R[5] = R[5] * R[5];
+			// innovation gate size
+			gate_size[5] = 5.0f;
 
+			// Log all this junk for development testing
 			static orb_advert_t _tiny_ekf_topic = nullptr;
 			tiny_ekf_s report = {};
 			report.z_est = z_estimate;
 
 			report.baro = baro_measurement;
+			report.baro_noise = baro_noise;
 			report.rangefinder = rangefinder_measurement;
+			report.rangefinder_noise = rangefinder_noise;
 			report.timestamp = _time_last_imu;
 
 			if(_tiny_ekf_topic == nullptr) {
@@ -138,15 +150,6 @@ void Ekf::fuseVelPosHeight()
 			} else {
 				orb_publish(ORB_ID(tiny_ekf), _tiny_ekf_topic, &report);
 			}
-
-			fuse_map[5] = true;
-			// vertical position innovation - baro measurement has opposite sign to earth z axis
-			innovation[5] = _state.pos(2) - z_estimate;
-			// observation variance - user parameter defined
-			R[5] = 0.25f;
-			R[5] = R[5] * R[5];
-			// innovation gate size
-			gate_size[5] = 5.0f;
 		}
 
 

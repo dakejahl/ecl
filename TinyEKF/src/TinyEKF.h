@@ -115,12 +115,21 @@ class TinyEKF {
         }
 
          /**
-         * Gets the process noise covariance value of element at a given index (diagnal only).
+         * Gets the process noise covariance value of element at a given index.
          * @param i the index (at least 0 and less than <i>n</i>
          */
         double getQ(int i, int j)
         {
             return this->ekf.Q[i][j];
+        }
+
+        /**
+         * Gets the measurement noise covariance value of element at a given index.
+         * @param i the index (at least 0 and less than <i>n</i>
+         */
+        double getR(int i, int j)
+        {
+            return this->ekf.R[i][j];
         }
 
         /**
