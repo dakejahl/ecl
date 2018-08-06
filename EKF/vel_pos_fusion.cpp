@@ -44,6 +44,7 @@
 #include "ekf.h"
 #include <ecl.h>
 #include <mathlib/mathlib.h>
+#include "tiny_ekf_interface.h"
 
 void Ekf::fuseVelPosHeight()
 {
@@ -95,6 +96,7 @@ void Ekf::fuseVelPosHeight()
 	}
 
 	if (_fuse_height) {
+		AltitudeFusionTinyEKF tinyEKF;
 		if (_control_status.flags.baro_hgt) {
 			fuse_map[5] = true;
 			// vertical position innovation - baro measurement has opposite sign to earth z axis
