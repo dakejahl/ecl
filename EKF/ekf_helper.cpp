@@ -1072,7 +1072,7 @@ void Ekf::get_ekf_ctrl_limits(float *vxy_max, float *vz_max, float *hagl_min, fl
 
 	// TODO : calculate visual odometry limits
 
-	bool relying_on_rangefinder = _control_status.flags.rng_hgt;
+	//bool relying_on_rangefinder = _control_status.flags.rng_hgt;
 
 	bool relying_on_optical_flow = _control_status.flags.opt_flow && !(_control_status.flags.gps || _control_status.flags.ev_pos);
 
@@ -1083,12 +1083,12 @@ void Ekf::get_ekf_ctrl_limits(float *vxy_max, float *vz_max, float *hagl_min, fl
 	*hagl_max = NAN;
 
 	// Keep within range sensor limit when using rangefinder as primary height source
-	if (relying_on_rangefinder) {
-		*vxy_max = NAN;
-		*vz_max = NAN;
-		*hagl_min = rangefinder_hagl_min;
-		*hagl_max = rangefinder_hagl_max;
-	}
+	// if (relying_on_rangefinder) {
+	// 	*vxy_max = NAN;
+	// 	*vz_max = NAN;
+	// 	*hagl_min = rangefinder_hagl_min;
+	// 	*hagl_max = rangefinder_hagl_max;
+	// }
 
 	// Keep within flow AND range sensor limits when exclusively using optical flow
 	if (relying_on_optical_flow) {
