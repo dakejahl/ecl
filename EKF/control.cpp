@@ -1105,7 +1105,7 @@ void Ekf::rangeAidConditionsMet()
 
 		bool tilt_valid = _params.range_cos_max_tilt < _R_rng_to_earth_2_2;
 		if(!tilt_valid) {
-			PX4_WARN("Too much tilt for range finder")
+			PX4_WARN("Too much tilt for range finder");
 		}
 
 		if (horz_vel_valid) {
