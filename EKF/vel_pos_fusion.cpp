@@ -44,6 +44,7 @@
 #include "ekf.h"
 #include <ecl.h>
 #include <mathlib/mathlib.h>
+#include <uORB/topics/distance_sensor.h>
 
 void Ekf::fuseVelPosHeight()
 {
@@ -137,8 +138,7 @@ void Ekf::fuseVelPosHeight()
 		} else if (_control_status.flags.rng_hgt && (_R_rng_to_earth_2_2 > _params.range_cos_max_tilt)) {
 			fuse_map[5] = true;
 			// use range finder with tilt correction
-			innovation[5] = _state.pos(2) - (-math::max(_range_sample_delayed.rng * _R_rng_to_earth_2_2,
-							 _params.rng_gnd_clearance)) - _hgt_sensor_offset;
+			innovation[5] = _state.pos(2) - (-math::max(_range_sample_delayed.rng * _R_rng_to_earth_2_2, _params.rng_gnd_clearance)) - _hgt_sensor_offset;
 			// observation variance - user parameter defined
 			R[5] = fmaxf((sq(_params.range_noise) + sq(_params.range_noise_scaler * _range_sample_delayed.rng)) * sq(_R_rng_to_earth_2_2), 0.01f);
 			// innovation gate size
@@ -154,6 +154,28 @@ void Ekf::fuseVelPosHeight()
 			// innovation gate size
 			gate_size[5] = fmaxf(_params.ev_innov_gate, 1.0f);
 		}
+
+			// Log all this junk for development testing
+			static orb_advert_t _jake_debug_topic = nullptr;
+			jake_debug_s report = {};
+			report.ekf2_z_est = z_estimate;
+
+			float baro_measurement = -1.0f * (_baro_sample_delayed.hgt) - _baro_hgt_offset - _hgt_sensor_offset
+			report.baro = baro_measurement;
+			report.baro_hgt_offset = _baro_hgt_offset;
+
+			float rangefinder_measurement = (-1.0f * math::max(_range_sample_delayed.rng * _R_rng_to_earth_2_2, _params.rng_gnd_clearance)) - _hgt_sensor_offset;
+			report.rangefinder = rangefinder_measurement;
+			report.rng_hgt_offset = _hgt_sensor_offset;
+
+			report.range_aiding = _control_status.flags.rng_hgt;
+			report.timestamp = _time_last_imu;
+
+			if(_tiny_ekf_topic == nullptr) {
+				_tiny_ekf_topic = orb_advertise(ORB_ID(tiny_ekf), &report);
+			} else {
+				orb_publish(ORB_ID(tiny_ekf), _tiny_ekf_topic, &report);
+			}
 
 		// update innovation class variable for logging purposes
 		_vel_pos_innov[5] = innovation[5];
