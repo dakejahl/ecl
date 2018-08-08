@@ -1083,12 +1083,11 @@ void Ekf::rangeAidConditionsMet()
 {
 	// if the parameter for range aid is enabled we allow to switch from using the primary height source to using range finder as height source
 	// under the following conditions
-	// 1) Vehicle is in-air
-	// 2) Range data is valid
-	// 3) Vehicle is no further than max_hagl_for_range_aid away from the ground
-	// 4) Ground speed is not higher than max_vel_for_range_aid
-	// 5) Terrain estimate is stable (needs better checks)
-	if (_control_status.flags.in_air && !_rng_hgt_faulty) {
+	// 1) Range data is valid
+	// 2) Vehicle is no further than max_hagl_for_range_aid away from the ground
+	// 3) Ground speed is not higher than max_vel_for_range_aid
+	// 4) Terrain estimate is stable (needs better checks)
+	if (!_rng_hgt_faulty) {
 		// check if we can use range finder measurements to estimate height, use hysteresis to avoid rapid switching
 		bool can_use_range_finder;
 		if (_range_aid_mode_enabled) {
@@ -1163,9 +1162,8 @@ void Ekf::checkRangeDataValidity()
 		return;
 	}
 
-	// Check if out of range
-	if ((_range_sample_delayed.rng > _rng_valid_max_val)
-	|| (_range_sample_delayed.rng < _rng_valid_min_val)) {
+	// Check if out of range and on the ground or not
+	if ((_range_sample_delayed.rng > _rng_valid_max_val) || (_range_sample_delayed.rng < _rng_valid_min_val)) {
 		if (_control_status.flags.in_air) {
 			_rng_hgt_faulty = true;
 			return;
