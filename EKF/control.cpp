@@ -1086,7 +1086,7 @@ void Ekf::rangeAidConditionsMet()
 	// 1) Vehicle is in-air
 	// 2) Range data is valid
 	// 3) Vehicle is no further than max_hagl_for_range_aid away from the ground
-	// 4) Ground speed is not higher than max_vel_for_range_aid
+	// 4) Tilt angle is not higher than _params.range_cos_max_tilt
 	// 5) Terrain estimate is stable (needs better checks)
 	if (_control_status.flags.in_air && !_rng_hgt_faulty) {
 		// check if we can use range finder measurements to estimate height, use hysteresis to avoid rapid switching
@@ -1103,18 +1103,17 @@ void Ekf::rangeAidConditionsMet()
 		bool horz_vel_valid = (_control_status.flags.gps || _control_status.flags.ev_pos || _control_status.flags.opt_flow)
 				      && (_fault_status.value == 0);
 
+		bool tilt_valid = _params.range_cos_max_tilt < _R_rng_to_earth_2_2;
+		if(!tilt_valid) {
+			PX4_WARN("Too much tilt for range finder")
+		}
+
 		if (horz_vel_valid) {
-			float ground_vel = sqrtf(_state.vel(0) * _state.vel(0) + _state.vel(1) * _state.vel(1));
 
 			if (_range_aid_mode_enabled) {
-				can_use_range_finder &= ground_vel < _params.max_vel_for_range_aid;
+				can_use_range_finder &= tilt_valid;
 
-			} else {
-				// if we were not using range aid in the previous iteration then require the ground velocity to be
-				// smaller than 70 % of the maximum allowed ground velocity for range aid
-				can_use_range_finder &= ground_vel < 0.7f * _params.max_vel_for_range_aid;
 			}
-
 		} else {
 			can_use_range_finder = false;
 		}
