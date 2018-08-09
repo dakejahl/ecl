@@ -44,6 +44,8 @@
 #include "ekf.h"
 #include <ecl.h>
 #include <mathlib/mathlib.h>
+#include <uORB/topics/tiny_ekf.h>
+#include <uORB/uORB.h>
 
 void Ekf::fuseVelPosHeight()
 {
@@ -157,6 +159,27 @@ void Ekf::fuseVelPosHeight()
 
 		// update innovation class variable for logging purposes
 		_vel_pos_innov[5] = innovation[5];
+
+		// Log all this junk for development testing
+		static orb_advert_t _jake_debug_topic = nullptr;
+		jake_dubug_s report = {};
+		report.z_est = z_estimate;
+
+		report.raw_baro = _baro_sample_delayed.hgt;
+		report.baro = baro_measurement;
+		report.baro_hgt_offset = _baro_hgt_offset;
+		report.raw_range = _range_sample_delayed.rng;
+		report.rangefinder = rangefinder_measurement;
+		report.rng_hgt_offset = _hgt_sensor_offset;
+		report.range_aiding = _control_status.flags.rng_hgt;
+		report.timestamp = _time_last_imu;
+
+		if(_jake_debug_topic == nullptr) {
+			_jake_debug_topic = orb_advertise(ORB_ID(jake_debug), &report);
+		} else {
+			orb_publish(ORB_ID(jake_debug), _jake_debug_topic, &report);
+		}
+
 	}
 
 	// calculate innovation test ratios
