@@ -165,6 +165,9 @@ void Ekf::fuseVelPosHeight()
 		jake_debug_s report = {};
 		report.ekf2_z_est = _state.pos(2);
 
+		float baro_measurement = -1.0f * _baro_sample_delayed.hgt - _baro_hgt_offset - _hgt_sensor_offset;
+		float rangefinder_measurement = (-math::max(_range_sample_delayed.rng * _R_rng_to_earth_2_2, _params.rng_gnd_clearance)) - _hgt_sensor_offset;
+
 		report.raw_baro = _baro_sample_delayed.hgt;
 		report.baro = baro_measurement;
 		report.baro_hgt_offset = _baro_hgt_offset;
