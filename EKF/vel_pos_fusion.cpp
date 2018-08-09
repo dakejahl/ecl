@@ -162,7 +162,7 @@ void Ekf::fuseVelPosHeight()
 
 		// Log all this junk for development testing
 		static orb_advert_t _jake_debug_topic = nullptr;
-		jake_dubug_s report = {};
+		jake_debug_s report = {};
 		report.z_est = z_estimate;
 
 		report.raw_baro = _baro_sample_delayed.hgt;
