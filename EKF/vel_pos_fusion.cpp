@@ -44,7 +44,7 @@
 #include "ekf.h"
 #include <ecl.h>
 #include <mathlib/mathlib.h>
-#include <uORB/topics/distance_sensor.h>
+#include <uORB/topics/jake_debug.h>
 #include <uORB/uORB.h>
 
 void Ekf::fuseVelPosHeight()
