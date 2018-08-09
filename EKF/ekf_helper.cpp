@@ -199,6 +199,22 @@ bool Ekf::resetPosition()
 	return true;
 }
 
+void Ekf::reset_altitude_estimate_calculate_datums()
+{
+	const gpsSample &gps_newest = _gps_buffer.get_newest();
+	const baroSample &baro_newest = _baro_buffer.get_newest();
+	const rangeSample range_newest = _range_buffer.get_newest();
+
+	// zero out our Z state velocity and acceleration
+	_state.pos(2) = 0;
+	_state.vel(2) = 0;
+
+	// calculate new datums for each Z state observation
+	_baro_hgt_offset = _state.pos(2) + baro_newest.hgt;
+	_hgt_sensor_offset =
+	_gps_alt_ref = 
+}
+
 // Reset height state using the last height measurement
 void Ekf::resetHeight()
 {

@@ -151,6 +151,8 @@ public:
 	*/
 	bool reset_imu_bias();
 
+	void reset_altitude_estimate_calculate_datums();
+
 	void get_vel_var(Vector3f &vel_var);
 
 	void get_pos_var(Vector3f &pos_var);

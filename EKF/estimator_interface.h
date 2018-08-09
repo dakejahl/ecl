@@ -107,6 +107,9 @@ public:
 	// gets the variances for the NED velocity states
 	virtual void get_vel_var(Vector3f &vel_var) = 0;
 
+	// zeroes out the current altitude estimate and recalculates the datums for each sensor
+	virtual void reset_altitude_estimate_calculate_datums() = 0;
+
 	// gets the variances for the NED position states
 	virtual void get_pos_var(Vector3f &pos_var) = 0;
 
