@@ -172,10 +172,10 @@ void Ekf::fuseVelPosHeight()
 			report.range_aiding = _control_status.flags.rng_hgt;
 			report.timestamp = _time_last_imu;
 
-			if(_tiny_ekf_topic == nullptr) {
-				_tiny_ekf_topic = orb_advertise(ORB_ID(tiny_ekf), &report);
+			if(_jake_debug_topic == nullptr) {
+				_jake_debug_topic = orb_advertise(ORB_ID(jake_debug), &report);
 			} else {
-				orb_publish(ORB_ID(tiny_ekf), _tiny_ekf_topic, &report);
+				orb_publish(ORB_ID(jake_debug), _jake_debug_topic, &report);
 			}
 
 		// update innovation class variable for logging purposes
