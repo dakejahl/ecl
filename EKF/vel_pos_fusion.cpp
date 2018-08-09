@@ -159,7 +159,7 @@ void Ekf::fuseVelPosHeight()
 			// Log all this junk for development testing
 			static orb_advert_t _jake_debug_topic = nullptr;
 			jake_debug_s report = {};
-			report.ekf2_z_est = z_estimate;
+			report.ekf2_z_est = _state.pos(2);
 
 			float baro_measurement = -1.0f * (_baro_sample_delayed.hgt) - _baro_hgt_offset - _hgt_sensor_offset
 			report.baro = baro_measurement;
