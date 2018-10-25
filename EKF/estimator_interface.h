@@ -39,6 +39,8 @@
  *
  */
 
+#pragma once
+
 #include "common.h"
 #include "RingBuffer.h"
 
@@ -173,6 +175,9 @@ public:
 	virtual bool collect_imu(const imuSample &imu) = 0;
 
 	// set delta angle imu data
+	void setIMUData(const imuSample &imu_sample);
+
+	// legacy interface for compatibility (2018-09-14)
 	void setIMUData(uint64_t time_usec, uint64_t delta_ang_dt, uint64_t delta_vel_dt, float (&delta_ang)[3], float (&delta_vel)[3]);
 
 	// set magnetometer data
@@ -468,6 +473,7 @@ protected:
 	struct map_projection_reference_s _pos_ref {};   // Contains WGS-84 position latitude and longitude (radians) of the EKF origin
 	struct map_projection_reference_s _gps_pos_prev {};   // Contains WGS-84 position latitude and longitude (radians) of the previous GPS message
 	float _gps_alt_prev{0.0f};	// height from the previous GPS message (m)
+	float _gps_yaw_offset{0.0f};	// Yaw offset angle for dual GPS antennas used for yaw estimation (radians).
 
 	// innovation consistency check monitoring ratios
 	float _yaw_test_ratio{0.0f};          // yaw innovation consistency check ratio

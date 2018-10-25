@@ -46,61 +46,53 @@
 #include <mathlib/mathlib.h>
 
 // Accumulate imu data and store to buffer at desired rate
-void EstimatorInterface::setIMUData(uint64_t time_usec, uint64_t delta_ang_dt, uint64_t delta_vel_dt,
-				    float (&delta_ang)[3], float (&delta_vel)[3])
+void EstimatorInterface::setIMUData(const imuSample &imu_sample)
 {
 	if (!_initialised) {
-		init(time_usec);
+		init(imu_sample.time_us);
 		_initialised = true;
 	}
 
-	const float dt = math::constrain((time_usec - _time_last_imu) / 1e6f, 1.0e-4f, 0.02f);
+	const float dt = math::constrain((imu_sample.time_us - _time_last_imu) / 1e6f, 1.0e-4f, 0.02f);
 
-	_time_last_imu = time_usec;
+	_time_last_imu = imu_sample.time_us;
 
 	if (_time_last_imu > 0) {
 		_dt_imu_avg = 0.8f * _dt_imu_avg + 0.2f * dt;
 	}
 
-	imuSample imu_sample_new;
-	imu_sample_new.delta_ang = Vector3f(delta_ang);
-	imu_sample_new.delta_vel = Vector3f(delta_vel);
-	imu_sample_new.delta_ang_dt = delta_ang_dt * 1e-6f;
-	imu_sample_new.delta_vel_dt = delta_vel_dt * 1e-6f;
-	imu_sample_new.time_us = time_usec;
-
 	// calculate a metric which indicates the amount of coning vibration
-	Vector3f temp = cross_product(imu_sample_new.delta_ang, _delta_ang_prev);
+	Vector3f temp = cross_product(imu_sample.delta_ang, _delta_ang_prev);
 	_vibe_metrics[0] = 0.99f * _vibe_metrics[0] + 0.01f * temp.norm();
 
 	// calculate a metric which indiates the amount of high frequency gyro vibration
-	temp = imu_sample_new.delta_ang - _delta_ang_prev;
-	_delta_ang_prev = imu_sample_new.delta_ang;
+	temp = imu_sample.delta_ang - _delta_ang_prev;
+	_delta_ang_prev = imu_sample.delta_ang;
 	_vibe_metrics[1] = 0.99f * _vibe_metrics[1] + 0.01f * temp.norm();
 
 	// calculate a metric which indicates the amount of high fequency accelerometer vibration
-	temp = imu_sample_new.delta_vel - _delta_vel_prev;
-	_delta_vel_prev = imu_sample_new.delta_vel;
+	temp = imu_sample.delta_vel - _delta_vel_prev;
+	_delta_vel_prev = imu_sample.delta_vel;
 	_vibe_metrics[2] = 0.99f * _vibe_metrics[2] + 0.01f * temp.norm();
 
 	// detect if the vehicle is not moving when on ground
 	if (!_control_status.flags.in_air) {
 		if ((_vibe_metrics[1] * 4.0E4f > _params.is_moving_scaler)
 				|| (_vibe_metrics[2] * 2.1E2f > _params.is_moving_scaler)
-				|| ((imu_sample_new.delta_ang.norm() / dt) > 0.05f * _params.is_moving_scaler)) {
+				|| ((imu_sample.delta_ang.norm() / dt) > 0.05f * _params.is_moving_scaler)) {
 
-			_time_last_move_detect_us = imu_sample_new.time_us;
+			_time_last_move_detect_us = imu_sample.time_us;
 		}
 
-		_vehicle_at_rest = ((imu_sample_new.time_us - _time_last_move_detect_us) > (uint64_t)1E6);
+		_vehicle_at_rest = ((imu_sample.time_us - _time_last_move_detect_us) > (uint64_t)1E6);
 
 	} else {
-		_time_last_move_detect_us = imu_sample_new.time_us;
+		_time_last_move_detect_us = imu_sample.time_us;
 		_vehicle_at_rest = false;
 	}
 
 	// accumulate and down-sample imu data and push to the buffer when new downsampled data becomes available
-	if (collect_imu(imu_sample_new)) {
+	if (collect_imu(imu_sample)) {
 
 		// down-sample the drag specific force data by accumulating and calculating the mean when
 		// sufficient samples have been collected
@@ -119,10 +111,10 @@ void EstimatorInterface::setIMUData(uint64_t time_usec, uint64_t delta_ang_dt, u
 
 			_drag_sample_count ++;
 			// note acceleration is accumulated as a delta velocity
-			_drag_down_sampled.accelXY(0) += imu_sample_new.delta_vel(0);
-			_drag_down_sampled.accelXY(1) += imu_sample_new.delta_vel(1);
-			_drag_down_sampled.time_us += imu_sample_new.time_us;
-			_drag_sample_time_dt += imu_sample_new.delta_vel_dt;
+			_drag_down_sampled.accelXY(0) += imu_sample.delta_vel(0);
+			_drag_down_sampled.accelXY(1) += imu_sample.delta_vel(1);
+			_drag_down_sampled.time_us += imu_sample.time_us;
+			_drag_sample_time_dt += imu_sample.delta_vel_dt;
 
 			// calculate the downsample ratio for drag specific force data
 			uint8_t min_sample_ratio = (uint8_t) ceilf((float)_imu_buffer_length / _obs_buffer_length);
@@ -149,6 +141,21 @@ void EstimatorInterface::setIMUData(uint64_t time_usec, uint64_t delta_ang_dt, u
 			}
 		}
 	}
+}
+
+void EstimatorInterface::setIMUData(uint64_t time_usec, uint64_t delta_ang_dt, uint64_t delta_vel_dt,
+				    float (&delta_ang)[3], float (&delta_vel)[3])
+{
+	imuSample imu_sample_new;
+	imu_sample_new.delta_ang = Vector3f(delta_ang);
+	imu_sample_new.delta_vel = Vector3f(delta_vel);
+
+	// convert time from us to secs
+	imu_sample_new.delta_ang_dt = delta_ang_dt / 1e6f;
+	imu_sample_new.delta_vel_dt = delta_vel_dt / 1e6f;
+	imu_sample_new.time_us = time_usec;
+
+	setIMUData(imu_sample_new);
 }
 
 void EstimatorInterface::setMagData(uint64_t time_usec, float (&data)[3])
@@ -219,6 +226,13 @@ void EstimatorInterface::setGpsData(uint64_t time_usec, struct gps_message *gps)
 		gps_sample_new.vacc = gps->epv;
 
 		gps_sample_new.hgt = (float)gps->alt * 1e-3f;
+
+		gps_sample_new.yaw = gps->yaw;
+		if (ISFINITE(gps->yaw_offset)) {
+			_gps_yaw_offset = gps->yaw_offset;
+		} else {
+			_gps_yaw_offset = 0.0f;
+		}
 
 		// Only calculate the relative position if the WGS-84 location of the origin is set
 		if (collect_gps(time_usec, gps)) {
@@ -369,16 +383,15 @@ void EstimatorInterface::setOpticalFlowData(uint64_t time_usec, flow_message *fl
 			flow_magnitude_good = (flow_rate_magnitude <= _flow_max_rate);
 		}
 
-		bool relying_on_flow =  _control_status.flags.opt_flow
-				&& !_control_status.flags.gps
-				&& !_control_status.flags.ev_pos;
+		bool relying_on_flow = !_control_status.flags.gps && !_control_status.flags.ev_pos;
 
 		// check quality metric
 		bool flow_quality_good = (flow->quality >= _params.flow_qual_min);
 
-		// Always use data when on ground to allow for bad quality due to unfocussed sensors and operator handling
-		// If flow quality fails checks on ground, assume zero flow rate after body rate compensation
-		if ((delta_time_good && flow_quality_good && (flow_magnitude_good || relying_on_flow)) || !_control_status.flags.in_air) {
+		// Check data validity and write to buffers
+		// Invalid flow data is allowed when on ground and is handled as a special case in controlOpticalFlowFusion()
+		bool use_flow_data_to_navigate = delta_time_good && flow_quality_good && (flow_magnitude_good || relying_on_flow);
+		if (use_flow_data_to_navigate || (!_control_status.flags.in_air && relying_on_flow)) {
 			flowSample optflow_sample_new;
 			// calculate the system time-stamp for the trailing edge of the flow data integration period
 			optflow_sample_new.time_us = time_usec - _params.flow_delay_ms * 1000;
@@ -386,10 +399,11 @@ void EstimatorInterface::setOpticalFlowData(uint64_t time_usec, flow_message *fl
 			// copy the quality metric returned by the PX4Flow sensor
 			optflow_sample_new.quality = flow->quality;
 
-			// NOTE: the EKF uses the reverse sign convention to the flow sensor. EKF assumes positive LOS rate is produced by a RH rotation of the image about the sensor axis.
 			// copy the optical and gyro measured delta angles
+			// NOTE: the EKF uses the reverse sign convention to the flow sensor. EKF assumes positive LOS rate
+			// is produced by a RH rotation of the image about the sensor axis.
 			optflow_sample_new.gyroXYZ = - flow->gyrodata;
-			optflow_sample_new.flowRadXY = - flow->flowdata;
+			optflow_sample_new.flowRadXY = -flow->flowdata;
 
 			// convert integration interval to seconds
 			optflow_sample_new.dt = delta_time;
@@ -427,6 +441,7 @@ void EstimatorInterface::setExtVisionData(uint64_t time_usec, ext_vision_message
 		// copy required data
 		ev_sample_new.angErr = evdata->angErr;
 		ev_sample_new.posErr = evdata->posErr;
+		ev_sample_new.hgtErr = evdata->hgtErr;
 		ev_sample_new.quat = evdata->quat;
 		ev_sample_new.posNED = evdata->posNED;
 

@@ -310,7 +310,7 @@ void Ekf::controlExternalVisionFusion()
 				_vel_pos_innov[4] = _state.pos(1) - _ev_sample_delayed.posNED(1);
 
 				// check if we have been deadreckoning too long
-				if (_time_last_imu - _time_last_pos_fuse > _params.no_gps_timeout_max) {
+				if (_time_last_imu - _time_last_pos_fuse > _params.reset_timeout_max) {
 					// don't reset velocity if we have another source of aiding constraining it
 					if (_time_last_imu - _time_last_of_fuse > (uint64_t)1E6) {
 						resetVelocity();
@@ -343,7 +343,7 @@ void Ekf::controlExternalVisionFusion()
 
 	} else if (_control_status.flags.ev_pos
 		   && (_time_last_imu >= _time_last_ext_vision)
-		   && (_time_last_imu - _time_last_ext_vision > (uint64_t)_params.no_gps_timeout_max)) {
+		   && (_time_last_imu - _time_last_ext_vision > (uint64_t)_params.reset_timeout_max)) {
 
 		// Turn off EV fusion mode if no data has been received
 		_control_status.flags.ev_pos = false;
@@ -420,7 +420,7 @@ void Ekf::controlOpticalFlowFusion()
 			       _control_status.flags.opt_flow = false;
 			       _time_last_of_fuse = 0;
 
-			} else if (_time_last_imu - _flow_sample_delayed.time_us > (uint64_t)_params.no_gps_timeout_max) {
+			} else if (_time_last_imu - _time_last_of_fuse > (uint64_t)_params.reset_timeout_max) {
 				_control_status.flags.opt_flow = false;
 
 			}
@@ -465,7 +465,7 @@ void Ekf::controlOpticalFlowFusion()
 		    && !_control_status.flags.gps
 		    && !_control_status.flags.ev_pos) {
 
-			bool do_reset = _time_last_imu - _time_last_of_fuse > _params.no_gps_timeout_max;
+			bool do_reset = _time_last_imu - _time_last_of_fuse > _params.reset_timeout_max;
 
 			if (do_reset) {
 				resetVelocity();
@@ -511,6 +511,33 @@ void Ekf::controlGpsFusion()
 	// Check for new GPS data that has fallen behind the fusion time horizon
 	if (_gps_data_ready) {
 
+		// GPS yaw aiding selection logic
+		if ((_params.fusion_mode & MASK_USE_GPSYAW)
+				&& ISFINITE(_gps_sample_delayed.yaw)
+				&& _control_status.flags.tilt_align
+				&& (!_control_status.flags.gps_yaw || !_control_status.flags.yaw_align)
+				&& (_time_last_imu - _time_last_gps < 2 * GPS_MAX_INTERVAL)) {
+
+			if (resetGpsAntYaw()) {
+				// flag the yaw as aligned
+				_control_status.flags.yaw_align = true;
+
+				// turn on fusion of external vision yaw measurements and disable all other yaw fusion
+				_control_status.flags.gps_yaw = true;
+				_control_status.flags.ev_yaw = false;
+				_control_status.flags.mag_hdg = false;
+				_control_status.flags.mag_3D = false;
+				_control_status.flags.mag_dec = false;
+
+				ECL_INFO("EKF commencing GPS yaw fusion");
+			}
+		}
+
+		// fuse the yaw observation
+		if (_control_status.flags.gps_yaw) {
+			fuseGpsAntYaw();
+		}
+
 		// Determine if we should use GPS aiding for velocity and horizontal position
 		// To start using GPS we need angular alignment completed, the local NED origin set and GPS data that has not failed checks recently
 		bool gps_checks_passing = (_time_last_imu - _last_gps_fail_us > (uint64_t)5e6);
@@ -521,7 +548,6 @@ void Ekf::controlGpsFusion()
 				// Do not use external vision for yaw if using GPS because yaw needs to be
 				// defined relative to an NED reference frame
 				if (!_control_status.flags.yaw_align || _control_status.flags.ev_yaw || _mag_inhibit_yaw_reset_req) {
-					_control_status.flags.yaw_align = false;
 					_control_status.flags.ev_yaw = false;
 					_control_status.flags.yaw_align = resetMagHeading(_mag_sample_delayed.mag);
 					// Handle the special case where we have not been constraining yaw drift or learning yaw bias due
@@ -572,13 +598,13 @@ void Ekf::controlGpsFusion()
 		if (_control_status.flags.gps) {
 			// We are relying on aiding to constrain drift so after a specified time
 			// with no aiding we need to do something
-			bool do_reset = (_time_last_imu - _time_last_pos_fuse > _params.no_gps_timeout_max)
-					&& (_time_last_imu - _time_last_delpos_fuse > _params.no_gps_timeout_max)
-					&& (_time_last_imu - _time_last_vel_fuse > _params.no_gps_timeout_max)
-					&& (_time_last_imu - _time_last_of_fuse > _params.no_gps_timeout_max);
+			bool do_reset = (_time_last_imu - _time_last_pos_fuse > _params.reset_timeout_max)
+					&& (_time_last_imu - _time_last_delpos_fuse > _params.reset_timeout_max)
+					&& (_time_last_imu - _time_last_vel_fuse > _params.reset_timeout_max)
+					&& (_time_last_imu - _time_last_of_fuse > _params.reset_timeout_max);
 
 			// We haven't had an absolute position fix for a longer time so need to do something
-			do_reset = do_reset || (_time_last_imu - _time_last_pos_fuse > 2 * _params.no_gps_timeout_max);
+			do_reset = do_reset || (_time_last_imu - _time_last_pos_fuse > 2 * _params.reset_timeout_max);
 
 			if (do_reset) {
 				// use GPS velocity data to check and correct yaw angle if a FW vehicle
@@ -1309,6 +1335,15 @@ void Ekf::controlDragFusion()
 
 void Ekf::controlMagFusion()
 {
+	if (_params.mag_fusion_type >= MAG_FUSE_TYPE_NONE) {
+		// do not use the magnetomer and deactivate magnetic field states
+		zeroRows(P, 16, 21);
+		zeroCols(P, 16, 21);
+		_control_status.flags.mag_hdg = false;
+		_control_status.flags.mag_3D = false;
+		return;
+	}
+
 	// If we are on ground, store the local position and time to use as a reference
 	// Also reset the flight alignment flag so that the mag fields will be re-initialised next time we achieve flight altitude
 	if (!_control_status.flags.in_air) {
