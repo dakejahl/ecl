@@ -1114,7 +1114,7 @@ void Ekf::rangeAidConditionsMet()
 	// 3) Vehicle is no further than max_hagl_for_range_aid away from the ground
 	// 4) Ground speed is not higher than max_vel_for_range_aid
 	// 5) Terrain estimate is stable (needs better checks)
-	if (_control_status.flags.in_air && !_rng_hgt_faulty) {
+	if (!_rng_hgt_faulty) {
 		// check if we can use range finder measurements to estimate height, use hysteresis to avoid rapid switching
 		bool can_use_range_finder;
 		if (_range_aid_mode_enabled) {
